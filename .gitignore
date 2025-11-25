@@ -3,3 +3,11 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# WiFi credentials (use wifi_config.h.example as template)
+src/wifi_config.h
+
+# Test artifacts
+*.pdf
+*.png
+*.bmp

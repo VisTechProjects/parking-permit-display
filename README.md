@@ -1,1 +1,77 @@
-# parking_pass_display
+# Toronto Parking Permit Display
+
+ESP32 e-ink display that automatically updates your Toronto temporary parking permit from GitHub.
+
+## Hardware
+
+- ESP32 with e-ink display (296x128) [Heltec E290 e-ink display](https://heltec.org/project/vision-master-e290/)
+- Button on GPIO 21
+
+## Setup
+
+### 1. Configure WiFi
+
+Edit `wifi_config.h`:
+```cpp
+const char* WIFI_SSID_1 = "YourWiFi";
+const char* WIFI_PASS_1 = "password";
+```
+
+### 2. GitHub Setup
+
+Create `permit.json` on `permit` branch:
+```json
+{
+  "permitNumber": "T6146330",
+  "plateNumber": "CSEB123",
+  "validFrom": "Oct 25, 2025: 12:00",
+  "validTo": "Nov 01, 2025: 11:59",
+  "barcodeValue": "6146330",
+  "barcodeLabel": "00435" // diffrent form barcode value
+}
+```
+
+Update GitHub URL in `wifi_config.h`:
+```cpp
+const char* SERVER_URL = "https://raw.githubusercontent.com/YOUR_USER/parking_pass_display/permit/permit.json";
+```
+
+### 3. Upload Code
+
+Install libraries:
+- Heltec E-Ink Modules
+- ArduinoJson v7+
+
+Upload `main.cpp` to ESP32.
+
+## Usage
+
+**Short press** - Check for updates (only downloads if changed)  
+**Long press (3+ sec)** - Force update (downloads regardless)
+
+Device auto-checks for updates on boot.
+
+## Update Permit (Python)
+
+```bash
+pip install pdfplumber PyPDF2 requests
+export GITHUB_TOKEN="your_token"
+python parse_parking_permit.py
+```
+
+Parses PDF and pushes to GitHub automatically.
+
+## Files
+
+- `main.cpp` - Main code
+- `wifi_helper.h` - WiFi and download
+- `wifi_config.h` - WiFi settings
+- `permit_config.h` - Display layout
+- `Code39Generator.h` - Barcode
+- `parse_parking_permit.py` - PDF parser
+
+## Notes
+
+- Permit data stored in flash memory
+- WiFi scan-first optimization (3-5 sec connection)
+- E-ink retains image when powered off

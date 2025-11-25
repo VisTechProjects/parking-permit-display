@@ -27,7 +27,7 @@ void displayPermit(const char *permitNumber, const char *plateNumber,
 
   // choose font/size
   display->setFont((GFXfont *)&FreeSansBold8pt7b);
-  display->setTextSize(1); 
+  display->setTextSize(1);
 
   // ========== CALCULATE TEXT POSITIONS ==========
   const int PLATE_X = PERMIT_X;
@@ -39,9 +39,9 @@ void displayPermit(const char *permitNumber, const char *plateNumber,
   const int VALID_TO_X = PERMIT_X;
   const int VALID_TO_Y = VALID_FROM_Y + VALID_TO_Y_OFFSET;
 
-  // Build permit strings
-  char permit_no[30];
-  char plate_no[30];
+  // Build permit strings (FIXED: increased buffer size to prevent overflow)
+  char permit_no[40];  // "Permit #: " (10) + permitNumber (20) + null (1) = 31 minimum
+  char plate_no[40];   // "Plate #: " (9) + plateNumber (20) + null (1) = 30 minimum
   sprintf(permit_no, "Permit #: %s", permitNumber);
   sprintf(plate_no, "Plate #: %s", plateNumber);
 
@@ -163,14 +163,15 @@ void checkForUpdate(bool forceUpdate = false)
     PermitData newPermit;
     int result;
 
+    // FIXED: Pass forceUpdate flag to downloadPermitData
     if (forceUpdate)
     {
-      // Force update - download without checking permit number
-      result = downloadPermitData(&newPermit, ""); // Empty string forces download
+      // Force update - pass true flag to skip permit number check
+      result = downloadPermitData(&newPermit, currentPermit.permitNumber, true);
     }
     else
     {
-      result = downloadPermitData(&newPermit, currentPermit.permitNumber);
+      result = downloadPermitData(&newPermit, currentPermit.permitNumber, false);
     }
 
     if (result == 1 || (result == 2 && forceUpdate))
@@ -281,7 +282,8 @@ void setup()
     }
 
     PermitData newPermit;
-    int result = downloadPermitData(&newPermit, currentPermit.permitNumber);
+    // FIXED: Add explicit false parameter for normal update
+    int result = downloadPermitData(&newPermit, currentPermit.permitNumber, false);
 
     if (result == 1)
     {
@@ -365,5 +367,5 @@ void loop()
     }
   }
 
-  delay(100); // Small delay to reduce CPU usage
+  delay(10); // Small delay to reduce CPU usage
 }

@@ -2,10 +2,16 @@
 #define WIFI_HELPER_H
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include "wifi_config.h"
+
+// WiFi timeout for connection attempts (milliseconds)
+#ifndef WIFI_TIMEOUT
+#define WIFI_TIMEOUT 5000  // 5 seconds per network
+#endif
 
 // ANSI color codes for serial output (only reliable colors)
 #define COLOR_RESET   "\033[0m"
@@ -14,7 +20,7 @@
 #define COLOR_YELLOW  "\033[33m"
 #define COLOR_MAGENTA "\033[35m"
 
-Preferences preferences;
+static Preferences preferences;
 
 struct PermitData {
   char permitNumber[20];
@@ -82,72 +88,115 @@ void savePermitData(PermitData* data) {
   Serial.println();
 }
 
-bool tryConnectToWiFi(const char* ssid, const char* password) {
-  Serial.print("Trying ");
-  Serial.print(ssid);
-  Serial.println("...");
+// OPTIMIZED: Scan-first WiFi connection for faster connection
+bool connectToWiFi() {
+  Serial.println("\n=== WiFi Connection Attempt ===");
+  Serial.println("Scanning for available networks...");
   
-  // Check if password is empty (open network)
-  if (strlen(password) == 0) {
-    WiFi.begin(ssid);
-  } else {
-    WiFi.begin(ssid, password);
-  }
+  // Scan for networks (async=false, show_hidden=false, passive=false, max_ms=200)
+  int n = WiFi.scanNetworks(false, false, false, 200);
   
-  unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startTime < WIFI_TIMEOUT) {
-    delay(500);
-    Serial.print(".");
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println();
-    Serial.print(COLOR_GREEN);
-    Serial.print("Connected to WiFi!");
+  if (n == 0) {
+    Serial.print(COLOR_RED);
+    Serial.print("No networks found!");
     Serial.print(COLOR_RESET);
     Serial.println();
-    Serial.print("  IP: ");
-    Serial.println(WiFi.localIP());
-    return true;
+    return false;
   }
   
-  Serial.println();
+  Serial.print("Found ");
+  Serial.print(n);
+  Serial.println(" networks");
+  
+  // Priority order: check which networks are in range
+  struct NetworkPriority {
+    const char* ssid;
+    const char* password;
+    const char* name;
+    int rssi;  // Signal strength
+    bool found;
+  };
+  
+  NetworkPriority networks[] = {
+    {WIFI_SSID_1, WIFI_PASS_1, "Vytis_Svecias", -999, false},
+    {WIFI_SSID_2, WIFI_PASS_2, "phone", -999, false},
+    {WIFI_SSID_3, WIFI_PASS_3, "36Batavia", -999, false}
+  };
+  
+  // Check which of our networks are available
+  for (int i = 0; i < n; i++) {
+    String ssid = WiFi.SSID(i);
+    int rssi = WiFi.RSSI(i);
+    
+    for (int j = 0; j < 3; j++) {
+      if (ssid == networks[j].ssid) {
+        networks[j].found = true;
+        networks[j].rssi = rssi;
+        Serial.print("  Found: ");
+        Serial.print(networks[j].name);
+        Serial.print(" (RSSI: ");
+        Serial.print(rssi);
+        Serial.println(" dBm)");
+      }
+    }
+  }
+  
+  // Try to connect in priority order
+  for (int i = 0; i < 3; i++) {
+    if (networks[i].found) {
+      Serial.print("Connecting to ");
+      Serial.print(networks[i].name);
+      Serial.println("...");
+      
+      // Check if password is empty (open network)
+      if (strlen(networks[i].password) == 0) {
+        WiFi.begin(networks[i].ssid);
+      } else {
+        WiFi.begin(networks[i].ssid, networks[i].password);
+      }
+      
+      unsigned long startTime = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - startTime < WIFI_TIMEOUT) {
+        delay(100);
+        Serial.print(".");
+      }
+      
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println();
+        Serial.print(COLOR_GREEN);
+        Serial.print("Connected to ");
+        Serial.print(networks[i].name);
+        Serial.print("!");
+        Serial.print(COLOR_RESET);
+        Serial.println();
+        Serial.print("  IP: ");
+        Serial.println(WiFi.localIP());
+        Serial.print("  Signal: ");
+        Serial.print(networks[i].rssi);
+        Serial.println(" dBm");
+        return true;
+      }
+      
+      Serial.println();
+      Serial.print(COLOR_YELLOW);
+      Serial.print("Failed to connect to ");
+      Serial.print(networks[i].name);
+      Serial.print(COLOR_RESET);
+      Serial.println();
+      WiFi.disconnect();
+    }
+  }
+  
   Serial.print(COLOR_RED);
-  Serial.print("Failed.");
+  Serial.print("None of your configured networks are in range.");
   Serial.print(COLOR_RESET);
   Serial.println();
   return false;
 }
 
-bool connectToWiFi() {
-  Serial.println("Attempting to connect to WiFi...");
-  
-  // Try WiFi 1
-  if (tryConnectToWiFi(WIFI_SSID_1, WIFI_PASS_1)) {
-    return true;
-  }
-  WiFi.disconnect();
-  
-  // Try WiFi 2
-  if (tryConnectToWiFi(WIFI_SSID_2, WIFI_PASS_2)) {
-    return true;
-  }
-  WiFi.disconnect();
-  
-  // Try WiFi 3
-  if (tryConnectToWiFi(WIFI_SSID_3, WIFI_PASS_3)) {
-    return true;
-  }
-  
-  Serial.print(COLOR_RED);
-  Serial.print("Failed to connect to any WiFi network.");
-  Serial.print(COLOR_RESET);
-  Serial.println();
-  return false;
-}
-
+// FIXED: Added forceUpdate parameter
 // Returns: 0 = error, 1 = updated, 2 = already up to date
-int downloadPermitData(PermitData* data, const char* currentPermitNumber) {
+int downloadPermitData(PermitData* data, const char* currentPermitNumber, bool forceUpdate = false) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.print(COLOR_RED);
     Serial.print("Not connected to WiFi!");
@@ -155,12 +204,27 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber) {
     Serial.println();
     return 0;
   }
-  
+
+  WiFiClientSecure client;
+  client.setInsecure();  // Skip certificate validation for simplicity
+
   HTTPClient http;
-  http.begin(SERVER_URL);
-  
+
+  // Add cache-busting parameter for force updates to bypass GitHub CDN cache
+  String url = SERVER_URL;
+  if (forceUpdate) {
+    url += "?t=";
+    url += String(millis());  // Add timestamp to make URL unique
+    Serial.print(COLOR_MAGENTA);
+    Serial.print("Force update - bypassing CDN cache");
+    Serial.print(COLOR_RESET);
+    Serial.println();
+  }
+
+  http.begin(client, url.c_str());
+
   Serial.print("Downloading permit data from ");
-  Serial.println(SERVER_URL);
+  Serial.println(url);
   
   int httpCode = http.GET();
   
@@ -169,8 +233,7 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber) {
     Serial.println("Download successful!");
     
     // Parse JSON
-    // Use a JsonDocument with enough capacity for the expected JSON payload.
-    // Increase size if your JSON grows.
+    // ArduinoJson v7 uses JsonDocument with automatic memory management
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
     
@@ -185,9 +248,7 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber) {
     }
     
     Serial.println("Permit data raw:");
-    
     Serial.print(payload);
-    
     Serial.println();
     
     // Validate that required field exists and is a string
@@ -223,8 +284,8 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber) {
     Serial.print(COLOR_RESET);
     Serial.println();
     
-    // Compare permit numbers
-    if (strcmp(newPermitNumber, currentPermitNumber) == 0) {
+    // FIXED: Compare permit numbers (skip check if forcing update)
+    if (!forceUpdate && strcmp(newPermitNumber, currentPermitNumber) == 0) {
       Serial.print(COLOR_YELLOW);
       Serial.print("Permit number matches. No changes needed.");
       Serial.print(COLOR_RESET);
@@ -233,10 +294,18 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber) {
       return 2;  // Already up to date
     }
     
-    Serial.print(COLOR_GREEN);
-    Serial.print("New permit detected! Updating...");
-    Serial.print(COLOR_RESET);
-    Serial.println();
+    // FIXED: Show appropriate message based on forceUpdate flag
+    if (forceUpdate) {
+      Serial.print(COLOR_MAGENTA);
+      Serial.print("Force update - downloading regardless of permit number");
+      Serial.print(COLOR_RESET);
+      Serial.println();
+    } else {
+      Serial.print(COLOR_GREEN);
+      Serial.print("New permit detected! Updating...");
+      Serial.print(COLOR_RESET);
+      Serial.println();
+    }
     
     // Extract data from JSON using helper function
     safeJsonCopy(data->permitNumber, sizeof(data->permitNumber), doc, JSON_PERMIT_NUMBER);
