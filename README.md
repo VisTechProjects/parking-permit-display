@@ -1,5 +1,10 @@
 # Toronto Parking Permit Display
 
+![Platform](https://img.shields.io/badge/platform-ESP32-blue)
+![Display](https://img.shields.io/badge/display-E--Ink%20296x128-green)
+![ArduinoJson](https://img.shields.io/badge/ArduinoJson-v7%2B-orange)
+![WiFi](https://img.shields.io/badge/WiFi-Multi--Network-brightgreen)
+
 ESP32 e-ink display that automatically updates your Toronto temporary parking permit from GitHub.
 
 ## Hardware
