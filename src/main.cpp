@@ -161,18 +161,7 @@ void checkForUpdate(bool forceUpdate = false)
     displayMessage("Downloading...", 1);
 
     PermitData newPermit;
-    int result;
-
-    // FIXED: Pass forceUpdate flag to downloadPermitData
-    if (forceUpdate)
-    {
-      // Force update - pass true flag to skip permit number check
-      result = downloadPermitData(&newPermit, currentPermit.permitNumber, true);
-    }
-    else
-    {
-      result = downloadPermitData(&newPermit, currentPermit.permitNumber, false);
-    }
+    int result = downloadPermitData(&newPermit, currentPermit.permitNumber, forceUpdate);
 
     if (result == 1 || (result == 2 && forceUpdate))
     {

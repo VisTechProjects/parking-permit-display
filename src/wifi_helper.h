@@ -222,10 +222,11 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber, bool f
   }
 
   http.begin(client, url.c_str());
+  http.setTimeout(10000);  // 10 second timeout
 
   Serial.print("Downloading permit data from ");
   Serial.println(url);
-  
+
   int httpCode = http.GET();
   
   if (httpCode == 200) {
@@ -241,6 +242,7 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber, bool f
       Serial.print(COLOR_RED);
       Serial.print("JSON parsing failed: ");
       Serial.print(error.c_str());
+      Serial.print(" (Check JSON format)");
       Serial.print(COLOR_RESET);
       Serial.println();
       http.end();
@@ -327,8 +329,18 @@ int downloadPermitData(PermitData* data, const char* currentPermitNumber, bool f
     return 1;  // Updated
   } else {
     Serial.print(COLOR_RED);
-    Serial.print("HTTP request failed with code: ");
-    Serial.print(httpCode);
+    Serial.print("HTTP request failed: ");
+    if (httpCode > 0) {
+      Serial.print("HTTP ");
+      Serial.print(httpCode);
+      if (httpCode == 404) Serial.print(" (File not found)");
+      else if (httpCode == 403) Serial.print(" (Access denied)");
+      else if (httpCode == 500) Serial.print(" (Server error)");
+    } else {
+      Serial.print("Network error (");
+      Serial.print(httpCode);
+      Serial.print(")");
+    }
     Serial.print(COLOR_RESET);
     Serial.println();
     http.end();

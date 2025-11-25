@@ -46,10 +46,16 @@ Upload `main.cpp` to ESP32.
 
 ## Usage
 
-**Short press** - Check for updates (only downloads if changed)  
-**Long press (3+ sec)** - Force update (downloads regardless)
+**Short press** - Check for updates (only downloads if permit number changed)
+**Long press (3+ sec)** - Force update (downloads all data, bypasses CDN cache)
 
 Device auto-checks for updates on boot.
+
+### Why Force Update?
+
+Use force update when you:
+- Changed permit details (dates, plate) but kept same permit number
+- Need to bypass GitHub's CDN cache (updates immediately, no 5-10 min wait)
 
 ## Update Permit (Python)
 
@@ -72,6 +78,8 @@ Parses PDF and pushes to GitHub automatically.
 
 ## Notes
 
-- Permit data stored in flash memory
+- Permit data stored in flash memory (persists after power loss)
 - WiFi scan-first optimization (3-5 sec connection)
 - E-ink retains image when powered off
+- Force update adds cache-busting parameter to bypass GitHub CDN
+- Multiple WiFi support with automatic fallback
