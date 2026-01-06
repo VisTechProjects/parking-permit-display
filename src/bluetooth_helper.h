@@ -185,15 +185,8 @@ int downloadPermitViaBluetooth(PermitData *data, const char *currentPermitNumber
     Serial.println("Received permit data:");
     Serial.println(permitJson.c_str());
 
-    // Try to get status characteristic and send SYNC_OK
-    BLERemoteCharacteristic *statusChar = service->getCharacteristic(BLEUUID(BLE_STATUS_CHAR_UUID));
-    if (statusChar && statusChar->canWrite())
-    {
-        Serial.println("Sending SYNC_OK to phone...");
-        statusChar->writeValue(ESP_MSG_SYNC_COMPLETE);
-    }
-
-    // Disconnect
+    // Disconnect first before any other operations
+    // Note: Writing to status characteristic causes spinlock crash, so disabled for now
     bleClient->disconnect();
     delete bleClient;
     bleClient = nullptr;

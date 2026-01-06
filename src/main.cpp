@@ -15,7 +15,7 @@
 EInkDisplay_VisionMasterE290 *display = nullptr;
 
 const int LED_PIN = 45;
-const int BUTTON_PIN = 0; // Built-in button
+const int BUTTON_PIN = 21; // User button on Heltec Vision Master E290
 
 // Preferences for storing permit data
 Preferences preferences;
@@ -243,15 +243,24 @@ void syncViaBluetooth(bool forceUpdate = false)
 
 void setup()
 {
+  // Early pin setup before Serial
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH); // LED on immediately
+
   Serial.begin(115200);
 
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  // Longer delay for USB CDC
+  for (int i = 0; i < 30; i++) {
+    delay(100);
+    Serial.print("."); // Try to get serial working
+  }
+  Serial.println();
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   Serial.println("\n=== Parking Permit Display (BLE) ===");
   Serial.println("Initializing display...");
+  Serial.flush();
 
   if (!displayInit())
   {
@@ -279,6 +288,8 @@ void setup()
   Serial.println("\nReady!");
   Serial.println("Short press: Sync via Bluetooth");
   Serial.println("Long press (3s): Force update display");
+
+  digitalWrite(LED_PIN, LOW); // LED off when ready
 }
 
 void loop()
