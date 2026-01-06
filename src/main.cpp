@@ -1,6 +1,7 @@
-// Parking Permit Display
+// Parking Permit Display - BLE Only Version
 #include <Arduino.h>
 #include "heltec-eink-modules.h"
+#include <Preferences.h>
 
 #include "Fonts/FreeSansBold8pt7b.h"
 #include "Fonts/FreeSansBold13pt7b.h"
@@ -8,13 +9,16 @@
 #include "Code39Generator.h"
 #include "imgs/toronto_logo.h"
 #include "permit_config.h"
-#include "wifi_helper.h"
 #include "bluetooth_helper.h"
 
-// Create display pointer locally (not extern)
+// Create display pointer locally
 EInkDisplay_VisionMasterE290 *display = nullptr;
 
 const int LED_PIN = 45;
+const int BUTTON_PIN = 0; // Built-in button
+
+// Preferences for storing permit data
+Preferences preferences;
 
 // Global permit data
 PermitData currentPermit;
@@ -23,26 +27,19 @@ void displayPermit(const char *permitNumber, const char *plateNumber,
                    const char *validFrom, const char *validTo,
                    const char *barcodeValue, const char *barcodeLabel)
 {
-  // clear display memory / framebuffer
   display->clearMemory();
-
-  // choose font/size
   display->setFont((GFXfont *)&FreeSansBold8pt7b);
   display->setTextSize(1);
 
-  // ========== CALCULATE TEXT POSITIONS ==========
   const int PLATE_X = PERMIT_X;
   const int PLATE_Y = PERMIT_Y + PLATE_Y_OFFSET;
-
   const int VALID_FROM_X = PERMIT_X;
   const int VALID_FROM_Y = PLATE_Y + VALID_FROM_Y_OFFSET;
-
   const int VALID_TO_X = PERMIT_X;
   const int VALID_TO_Y = VALID_FROM_Y + VALID_TO_Y_OFFSET;
 
-  // Build permit strings (FIXED: increased buffer size to prevent overflow)
-  char permit_no[40];  // "Permit #: " (10) + permitNumber (20) + null (1) = 31 minimum
-  char plate_no[40];   // "Plate #: " (9) + plateNumber (20) + null (1) = 30 minimum
+  char permit_no[40];
+  char plate_no[40];
   sprintf(permit_no, "Permit #: %s", permitNumber);
   sprintf(plate_no, "Plate #: %s", plateNumber);
 
@@ -52,7 +49,6 @@ void displayPermit(const char *permitNumber, const char *plateNumber,
   display->setCursor(PLATE_X, PLATE_Y);
   display->print(plate_no);
 
-  // Draw horizontal line separator between permit/plate and dates
   int lineY = PLATE_Y + HORIZONTAL_LINE_Y_OFFSET;
   display->drawLine(PERMIT_X, lineY, SCREEN_W - 5, lineY, 0x0000);
 
@@ -62,11 +58,9 @@ void displayPermit(const char *permitNumber, const char *plateNumber,
   display->setCursor(VALID_TO_X, VALID_TO_Y);
   display->print(validTo);
 
-  // ========== DRAW BARCODE ==========
   Code39Generator barcodeGen(display);
   barcodeGen.drawBarcode(barcodeValue, BARCODE_X, BARCODE_Y, BARCODE_HEIGHT, NARROW_BAR_WIDTH);
 
-  // Draw the human-readable label below the barcode (centered)
   int barcodePixelWidth = barcodeGen.getBarcodeWidth(barcodeValue, NARROW_BAR_WIDTH);
   int16_t x3, y3;
   uint16_t w, h;
@@ -76,15 +70,12 @@ void displayPermit(const char *permitNumber, const char *plateNumber,
   display->setCursor(labelX, BARCODE_Y + BARCODE_HEIGHT + BARCODE_LABEL_Y_OFFSET);
   display->print(barcodeLabel);
 
-  // ========== DRAW LOGO ==========
   int logoX = BARCODE_X + (barcodePixelWidth / 2) - (LOGO_WIDTH / 2);
   int logoY = BARCODE_Y + BARCODE_HEIGHT + LOGO_Y_OFFSET;
 
-  // Invert image (white logo on black background)
   display->fillRect(logoX, logoY, LOGO_WIDTH, LOGO_HEIGHT, 0x0000);
   display->drawBitmap(logoX, logoY, logo_toronto, LOGO_WIDTH, LOGO_HEIGHT, 0xFFFF);
 
-  // ========== DRAW TEMPORARY PARKING TEXT ==========
   const char *permitText1 = "Temporary parking";
   const char *permitText2 = "permit";
   int permitTextX = logoX + LOGO_WIDTH + TEMP_PARKING_X_OFFSET;
@@ -97,32 +88,24 @@ void displayPermit(const char *permitNumber, const char *plateNumber,
   display->setCursor(permitTextX, permitTextY2);
   display->print(permitText2);
 
-  // Push to e-ink
   display->update();
 }
 
 void displayMessage(const char *message, int textSize = 1)
 {
-  // Clear display memory
   display->clearMemory();
-
-  // Set font
   display->setFont(&FreeSansBold8pt7b);
   display->setTextSize(textSize);
 
-  // Get text bounds to center the message
   int16_t x1, y1;
   uint16_t w, h;
   display->getTextBounds((char *)message, 0, 0, &x1, &y1, &w, &h);
 
-  // Center the text on screen
   int x = (SCREEN_W - w) / 2;
   int y = (SCREEN_H + h) / 2;
 
   display->setCursor(x, y);
   display->print(message);
-
-  // Push to e-ink
   display->update();
 }
 
@@ -131,7 +114,6 @@ bool displayInit()
   if (!display)
   {
     display = new EInkDisplay_VisionMasterE290();
-
     if (!display)
     {
       Serial.println("Library constructor failed, trying explicit fallback...");
@@ -139,82 +121,124 @@ bool displayInit()
       return false;
     }
   }
-
   display->landscape();
   return true;
 }
 
-void checkForUpdate(bool forceUpdate = false)
+// Save permit data to flash
+void savePermitData(PermitData *data)
 {
-  Serial.println("\n=== Manual Update Triggered ===");
+  preferences.begin("permit", false);
+  preferences.putString("permitNum", data->permitNumber);
+  preferences.putString("plateNum", data->plateNumber);
+  preferences.putString("validFrom", data->validFrom);
+  preferences.putString("validTo", data->validTo);
+  preferences.putString("barcode", data->barcodeValue);
+  preferences.putString("barLabel", data->barcodeLabel);
+  preferences.end();
+  Serial.println("Permit data saved to flash");
+}
+
+// Load permit data from flash
+bool loadPermitData(PermitData *data)
+{
+  preferences.begin("permit", true);
+  String permitNum = preferences.getString("permitNum", "");
+  if (permitNum.length() == 0)
+  {
+    preferences.end();
+    return false;
+  }
+
+  strncpy(data->permitNumber, permitNum.c_str(), sizeof(data->permitNumber) - 1);
+  strncpy(data->plateNumber, preferences.getString("plateNum", "").c_str(), sizeof(data->plateNumber) - 1);
+  strncpy(data->validFrom, preferences.getString("validFrom", "").c_str(), sizeof(data->validFrom) - 1);
+  strncpy(data->validTo, preferences.getString("validTo", "").c_str(), sizeof(data->validTo) - 1);
+  strncpy(data->barcodeValue, preferences.getString("barcode", "").c_str(), sizeof(data->barcodeValue) - 1);
+  strncpy(data->barcodeLabel, preferences.getString("barLabel", "").c_str(), sizeof(data->barcodeLabel) - 1);
+  preferences.end();
+
+  Serial.print("Loaded permit from flash: ");
+  Serial.println(data->permitNumber);
+  return true;
+}
+
+// Sync permit via Bluetooth
+void syncViaBluetooth(bool forceUpdate = false)
+{
+  Serial.println("\n=== Bluetooth Sync ===");
   if (forceUpdate)
   {
-    Serial.println("FORCE UPDATE - Will download regardless of permit number");
-    displayMessage("Force update...", 1);
+    Serial.println("FORCE UPDATE - Will update display regardless of permit number");
+    displayMessage("Force sync...", 1);
   }
   else
   {
-    displayMessage("Checking for\nupdate...", 1);
+    displayMessage("Scanning...", 1);
   }
 
-  if (connectToWiFi())
+  if (!scanForPhone())
   {
-    displayMessage("Downloading...", 1);
-
-    PermitData newPermit;
-    int result = downloadPermitData(&newPermit, currentPermit.permitNumber, forceUpdate);
-
-    if (result == 1 || (result == 2 && forceUpdate))
-    {
-      // Updated (or force update even if same)
-      Serial.println("Permit downloaded!");
-      displayMessage("Updated!", 2);
-      delay(1000);
-
-      // Update current permit and display
-      currentPermit = newPermit;
-      displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
-                    currentPermit.validFrom, currentPermit.validTo,
-                    currentPermit.barcodeValue, currentPermit.barcodeLabel);
-    }
-    else if (result == 2)
-    {
-      // Already up to date
-      Serial.println("Already up to date!");
-      displayMessage("Already up\nto date", 1);
-      delay(2000);
-
-      // Redisplay current permit
-      displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
-                    currentPermit.validFrom, currentPermit.validTo,
-                    currentPermit.barcodeValue, currentPermit.barcodeLabel);
-    }
-    else
-    {
-      // Error
-      Serial.println("Update failed!");
-      displayMessage("Update failed", 1);
-      delay(2000);
-
-      // Redisplay current permit
-      displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
-                    currentPermit.validFrom, currentPermit.validTo,
-                    currentPermit.barcodeValue, currentPermit.barcodeLabel);
-    }
-
-    disconnectWiFi();
-  }
-  else
-  {
-    Serial.println("WiFi not available!");
-    displayMessage("No WiFi", 1);
+    displayMessage("Phone not found", 1);
     delay(2000);
+    // Redisplay current permit if we have one
+    if (strlen(currentPermit.permitNumber) > 0)
+    {
+      displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
+                    currentPermit.validFrom, currentPermit.validTo,
+                    currentPermit.barcodeValue, currentPermit.barcodeLabel);
+    }
+    cleanupBluetooth();
+    return;
+  }
 
-    // Redisplay current permit
+  displayMessage("Connecting...", 1);
+
+  PermitData newPermit;
+  int result = downloadPermitViaBluetooth(&newPermit, currentPermit.permitNumber);
+
+  if (result == 1 || (result == 2 && forceUpdate))
+  {
+    // New permit received or force update
+    Serial.println("Permit received!");
+    displayMessage("Updating...", 1);
+
+    currentPermit = newPermit;
+    savePermitData(&currentPermit);
+
+    displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
+                  currentPermit.validFrom, currentPermit.validTo,
+                  currentPermit.barcodeValue, currentPermit.barcodeLabel);
+
+    Serial.println("Display updated!");
+  }
+  else if (result == 2)
+  {
+    // Already up to date
+    Serial.println("Already up to date");
+    displayMessage("Up to date", 1);
+    delay(1500);
+
     displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
                   currentPermit.validFrom, currentPermit.validTo,
                   currentPermit.barcodeValue, currentPermit.barcodeLabel);
   }
+  else
+  {
+    // Error
+    Serial.println("Sync failed");
+    displayMessage("Sync failed", 1);
+    delay(2000);
+
+    if (strlen(currentPermit.permitNumber) > 0)
+    {
+      displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
+                    currentPermit.validFrom, currentPermit.validTo,
+                    currentPermit.barcodeValue, currentPermit.barcodeLabel);
+    }
+  }
+
+  cleanupBluetooth();
 }
 
 void setup()
@@ -224,10 +248,10 @@ void setup()
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  // Setup button with internal pullup
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  Serial.println("Attempting to create display instance...");
+  Serial.println("\n=== Parking Permit Display (BLE) ===");
+  Serial.println("Initializing display...");
 
   if (!displayInit())
   {
@@ -235,85 +259,26 @@ void setup()
     while (1)
       ;
   }
-  else
-  {
-    Serial.println("Display instance created.");
-  }
+  Serial.println("Display ready.");
 
-  // Try to load saved permit data first
+  // Load saved permit data
   bool hasSavedData = loadPermitData(&currentPermit);
 
-  // Note: Don't display yet - e-ink retains image when powered off
-  // We'll only update display if data changes or if this is first boot
-
   if (!hasSavedData)
   {
-    // No saved data, show message
-    displayMessage("No permit data", 1);
-    Serial.println("No saved permit data available.");
-    strcpy(currentPermit.permitNumber, ""); // Empty permit number
+    displayMessage("No permit data\nPress button to sync", 1);
+    Serial.println("No saved permit. Press button to sync via Bluetooth.");
+    strcpy(currentPermit.permitNumber, "");
   }
   else
   {
-    Serial.println("Saved permit data loaded. Display should already show this data.");
+    Serial.println("Permit loaded from flash.");
+    // E-ink retains image, no need to redraw unless data changed
   }
 
-  // Try to connect to WiFi and update
-  if (!hasSavedData)
-  {
-    displayMessage("Checking WiFi...", 1);
-  }
-
-  if (connectToWiFi())
-  {
-    if (!hasSavedData)
-    {
-      displayMessage("Updating...", 1);
-    }
-
-    PermitData newPermit;
-    // FIXED: Add explicit false parameter for normal update
-    int result = downloadPermitData(&newPermit, currentPermit.permitNumber, false);
-
-    if (result == 1)
-    {
-      Serial.println("Successfully downloaded new permit data!");
-      currentPermit = newPermit;
-
-      // Display the updated permit
-      displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
-                    currentPermit.validFrom, currentPermit.validTo,
-                    currentPermit.barcodeValue, currentPermit.barcodeLabel);
-    }
-    else if (result == 2)
-    {
-      Serial.println("Permit is already current.");
-      // Permit already displayed, no action needed
-    }
-    else
-    {
-      Serial.println("Failed to download permit data. Using saved data.");
-      // If no saved data, show error
-      if (!hasSavedData)
-      {
-        displayMessage("Update failed", 1);
-      }
-    }
-
-    // Disconnect WiFi to save power
-    disconnectWiFi();
-  }
-  else
-  {
-    Serial.println("WiFi not available. Using saved data.");
-    // If no saved data, show error
-    if (!hasSavedData)
-    {
-      displayMessage("No WiFi", 1);
-    }
-  }
-
-  Serial.println("Setup complete. Press button to check for updates.");
+  Serial.println("\nReady!");
+  Serial.println("Short press: Sync via Bluetooth");
+  Serial.println("Long press (3s): Force update display");
 }
 
 void loop()
@@ -324,7 +289,6 @@ void loop()
     delay(50); // Debounce
     if (digitalRead(BUTTON_PIN) == LOW)
     {
-      // Button is pressed - measure how long
       unsigned long pressStart = millis();
       bool longPressTriggered = false;
 
@@ -333,11 +297,10 @@ void loop()
       {
         if (!longPressTriggered && (millis() - pressStart) >= 3000)
         {
-          // Long press threshold reached - trigger immediately
           Serial.println("Long press detected - Force update!");
           longPressTriggered = true;
-          checkForUpdate(true); // Force update
-          break;                // Exit loop
+          syncViaBluetooth(true); // Force update
+          break;
         }
         delay(10);
       }
@@ -348,14 +311,14 @@ void loop()
         delay(10);
       }
 
-      // If it was a short press (long press wasn't triggered)
+      // Short press - normal sync
       if (!longPressTriggered)
       {
-        Serial.println("Short press detected - Normal update check");
-        checkForUpdate(false); // Normal update
+        Serial.println("Short press detected - Normal sync");
+        syncViaBluetooth(false);
       }
     }
   }
 
-  delay(10); // Small delay to reduce CPU usage
+  delay(10);
 }

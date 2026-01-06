@@ -21,8 +21,15 @@
 #define BLE_SCAN_TIME 5        // seconds to scan for phone
 #define BLE_CONNECT_TIMEOUT 10 // seconds to wait for connection
 
-// Forward declaration
-struct PermitData;
+// Permit data structure
+struct PermitData {
+  char permitNumber[20];
+  char plateNumber[20];
+  char validFrom[30];
+  char validTo[30];
+  char barcodeValue[20];
+  char barcodeLabel[20];
+};
 
 // ANSI colors (should match wifi_helper.h)
 #ifndef COLOR_RESET
