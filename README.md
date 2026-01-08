@@ -4,6 +4,8 @@
 ![Display](https://img.shields.io/badge/display-E--Ink%20296x128-green)
 ![BLE](https://img.shields.io/badge/BLE-Bluetooth%20LE-blue)
 
+![Display Photo](docs/display.jpg)
+
 ESP32 e-ink display that shows your Toronto temporary parking permit. Syncs wirelessly via Bluetooth from the [parking-permit-android](https://github.com/VisTechProjects/parking-permit-android) app.
 
 ## Hardware
