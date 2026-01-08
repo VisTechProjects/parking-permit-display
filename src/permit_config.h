@@ -4,6 +4,7 @@
 // ========== SCREEN SETTINGS ==========
 const int SCREEN_W = 296;
 const int SCREEN_H = 128;
+const bool FLIP_DISPLAY = false;  // Set to true to rotate display 180°
 
 // ========== PERMIT DATA ==========
 const char *PERMIT_NUMBER = "T6103268";

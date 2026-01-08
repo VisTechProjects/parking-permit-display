@@ -121,8 +121,19 @@ bool displayInit()
       return false;
     }
   }
+  // Initial orientation (will be updated from settings)
   display->landscape();
   return true;
+}
+
+// Apply display rotation based on setting
+void applyDisplayRotation(bool flipped)
+{
+  if (flipped) {
+    display->setRotation(3);  // 180° from normal landscape
+  } else {
+    display->setRotation(1);  // Normal landscape
+  }
 }
 
 // Save permit data to flash
@@ -135,6 +146,7 @@ void savePermitData(PermitData *data)
   preferences.putString("validTo", data->validTo);
   preferences.putString("barcode", data->barcodeValue);
   preferences.putString("barLabel", data->barcodeLabel);
+  preferences.putBool("flipped", data->displayFlipped);
   preferences.end();
   Serial.println("Permit data saved to flash");
 }
@@ -156,6 +168,7 @@ bool loadPermitData(PermitData *data)
   strncpy(data->validTo, preferences.getString("validTo", "").c_str(), sizeof(data->validTo) - 1);
   strncpy(data->barcodeValue, preferences.getString("barcode", "").c_str(), sizeof(data->barcodeValue) - 1);
   strncpy(data->barcodeLabel, preferences.getString("barLabel", "").c_str(), sizeof(data->barcodeLabel) - 1);
+  data->displayFlipped = preferences.getBool("flipped", false);
   preferences.end();
 
   Serial.print("Loaded permit from flash: ");
@@ -237,6 +250,9 @@ void syncViaBluetooth(bool forceUpdate = false, bool silent = false)
     currentPermit = newPermit;
     savePermitData(&currentPermit);
 
+    // Apply rotation before rendering
+    applyDisplayRotation(currentPermit.displayFlipped);
+
     displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
                   currentPermit.validFrom, currentPermit.validTo,
                   currentPermit.barcodeValue, currentPermit.barcodeLabel);
@@ -245,10 +261,26 @@ void syncViaBluetooth(bool forceUpdate = false, bool silent = false)
   }
   else if (result == 2)
   {
-    // Already up to date - restore permit display if we showed "Syncing..."
-    Serial.println("Already up to date");
-    if (!silent && strlen(currentPermit.permitNumber) > 0)
+    // Permit unchanged - but check if settings changed
+    Serial.println("Permit unchanged - checking settings...");
+    Serial.printf("  Current flip: %d, New flip: %d\n", currentPermit.displayFlipped, newPermit.displayFlipped);
+
+    // Check if flip setting changed
+    if (newPermit.displayFlipped != currentPermit.displayFlipped)
     {
+      Serial.println("Flip setting changed - updating display");
+      currentPermit.displayFlipped = newPermit.displayFlipped;
+      savePermitData(&currentPermit);
+      applyDisplayRotation(currentPermit.displayFlipped);
+      displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
+                    currentPermit.validFrom, currentPermit.validTo,
+                    currentPermit.barcodeValue, currentPermit.barcodeLabel);
+      Serial.println("Display flipped!");
+    }
+    else if (!silent && strlen(currentPermit.permitNumber) > 0)
+    {
+      Serial.println("No setting changes, restoring display");
+      // Restore permit display if we showed "Syncing..."
       displayPermit(currentPermit.permitNumber, currentPermit.plateNumber,
                     currentPermit.validFrom, currentPermit.validTo,
                     currentPermit.barcodeValue, currentPermit.barcodeLabel);
@@ -321,6 +353,8 @@ void setup()
   else
   {
     Serial.println("Permit loaded from flash.");
+    // Apply saved rotation setting
+    applyDisplayRotation(currentPermit.displayFlipped);
     // E-ink retains image, no need to redraw unless data changed
   }
 

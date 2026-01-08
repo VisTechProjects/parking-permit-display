@@ -43,6 +43,7 @@ struct PermitData {
   char validTo[30];
   char barcodeValue[20];
   char barcodeLabel[20];
+  bool displayFlipped;
 };
 
 static BLEClient *bleClient = nullptr;
@@ -260,6 +261,7 @@ int downloadPermitViaBluetooth(PermitData *data, const char *currentPermitNumber
     strncpy(data->validTo, validTo, sizeof(data->validTo) - 1);
     strncpy(data->barcodeValue, doc["barcodeValue"] | "", sizeof(data->barcodeValue) - 1);
     strncpy(data->barcodeLabel, doc["barcodeLabel"] | "", sizeof(data->barcodeLabel) - 1);
+    data->displayFlipped = doc["displayFlipped"] | false;
 
     // Check if permit changed (with null safety)
     if (currentPermitNumber != nullptr && strcmp(data->permitNumber, currentPermitNumber) == 0)
