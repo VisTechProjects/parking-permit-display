@@ -1,6 +1,6 @@
 # Toronto Parking Permit Display
 
-![Platform](https://img.shields.io/badge/platform-ESP32-blue)
+![Platform](https://img.shields.io/badge/platform-ESP32-orange)
 ![Display](https://img.shields.io/badge/display-E--Ink%20296x128-green)
 ![BLE](https://img.shields.io/badge/BLE-Bluetooth%20LE-blue)
 
