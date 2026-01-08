@@ -41,11 +41,11 @@ pio run -e vision_e290 --target upload
 
 Install [ParkingPermitSync](https://github.com/VisTechProjects/ParkingPermitSync) on your phone.
 
-### 3. Pair
+### 3. Sync
 
 1. Open app on phone
-2. Press button on ESP32
-3. They'll find each other via BLE
+2. ESP32 auto-syncs on boot when phone is nearby
+3. Button press as backup/manual trigger
 
 ## BLE Protocol
 
@@ -71,5 +71,4 @@ ESP32 scans for the Android app's BLE advertisement, connects, and reads permit 
 
 - Permit data persists in flash memory
 - E-ink retains image when powered off
-- ~0.35% battery/day on Android for background BLE
 - Display can be flipped 180° via app setting
