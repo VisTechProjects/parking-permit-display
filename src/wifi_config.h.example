@@ -1,0 +1,36 @@
+#ifndef WIFI_CONFIG_H
+#define WIFI_CONFIG_H
+
+// ========== HARDWARE ==========
+const int BUTTON_PIN = 21;  // Button to trigger manual update
+
+// ========== WIFI CREDENTIALS ==========
+// Primary WiFi (tried first)
+const char* WIFI_SSID_1 = "YOUR_PRIMARY_SSID";
+const char* WIFI_PASS_1 = "YOUR_PRIMARY_PASSWORD";
+
+// Secondary WiFi (tried second)
+const char* WIFI_SSID_2 = "YOUR_SECONDARY_SSID";
+const char* WIFI_PASS_2 = "YOUR_SECONDARY_PASSWORD";
+
+// Tertiary WiFi (tried third)
+const char* WIFI_SSID_3 = "YOUR_TERTIARY_SSID";
+const char* WIFI_PASS_3 = "";  // Empty string for open network
+
+// Connection timeout in milliseconds
+const int WIFI_TIMEOUT = 5000;  // 5 seconds per network
+
+// ========== SERVER SETTINGS ==========
+// GitHub raw URL for permit.json
+const char* SERVER_URL = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/YOUR_BRANCH/permit.json";
+
+// ========== JSON FIELD NAMES ==========
+// Adjust these to match your JSON structure
+const char* JSON_PERMIT_NUMBER = "permitNumber";
+const char* JSON_PLATE_NUMBER = "plateNumber";
+const char* JSON_VALID_FROM = "validFrom";
+const char* JSON_VALID_TO = "validTo";
+const char* JSON_BARCODE_VALUE = "barcodeValue";
+const char* JSON_BARCODE_LABEL = "barcodeLabel";
+
+#endif

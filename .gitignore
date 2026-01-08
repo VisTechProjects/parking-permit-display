@@ -1,0 +1,15 @@
+.pio
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
+/.claude/
+
+# WiFi credentials (use wifi_config.h.example as template)
+src/wifi_config.h
+
+# Test artifacts
+*.pdf
+*.png
+*.bmp
+*.py
